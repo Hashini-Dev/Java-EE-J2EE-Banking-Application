@@ -58,6 +58,9 @@ public class UserSessionBean implements UserService {
     @TransactionAttribute(TransactionAttributeType.REQUIRED)
     public void registerUser(User user) {
         // Check for existing users
+        if (existsByUsername(user.getUsername())) {
+            throw new DuplicateUserException("Already have account for this username");
+        }
         if (existsByEmail(user.getEmail())) {
             throw new DuplicateUserException("Already have account for this email");
         }
@@ -119,6 +122,14 @@ public class UserSessionBean implements UserService {
         } catch (NoResultException e) {
             return false;
         }
+    }
+
+    @Override
+    public boolean existsByUsername(String username) {
+        Long count = em.createQuery("SELECT COUNT(u) FROM User u WHERE u.username = :username", Long.class)
+                .setParameter("username", username)
+                .getSingleResult();
+        return count > 0;
     }
 
     @Override

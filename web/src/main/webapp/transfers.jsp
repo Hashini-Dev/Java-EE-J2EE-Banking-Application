@@ -25,6 +25,18 @@
             </header>
 
             <div class="container py-4">
+                <c:if test="${not empty success}">
+                    <div class="alert alert-success alert-dismissible fade show mb-4" role="alert">
+                        <strong>Success!</strong> ${success}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                </c:if>
+                <c:if test="${not empty error}">
+                    <div class="alert alert-danger alert-dismissible fade show mb-4" role="alert">
+                        <strong>Transfer Error!</strong> ${error}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                </c:if>
                 <!-- Search Bar -->
                 <div class="row justify-content-center mb-4">
                     <div class="col-lg-8">
@@ -91,76 +103,35 @@
 
                         <!-- Tab Content -->
                         <div class="tab-content mt-4">
-                            <!-- Past Payments Tab -->
+                            <!-- Past Payments Tab (Incoming Account Credit) -->
                             <div class="tab-pane fade show active" id="past">
-                                <c:if test="${empty history}">
-                                    <div class="text-center py-5">
-                                        <img src="https://img.icons8.com/plasticine/100/000000/empty-box.png"
-                                            alt="Empty">
-                                        <p class="text-muted mt-3">No completed transactions found.</p>
-                                    </div>
-                                </c:if>
-
+                                <c:set var="hasPast" value="false" />
+                                
                                 <c:forEach var="item" items="${history}">
-                                    <c:if test="${item.status == 'COMPLETED'}">
+                                    <c:if test="${item.toAccount.user.id == loggedUser.id && (item.status.status == 'Success' || item.status.status == 'COMPLETED')}">
+                                        <c:set var="hasPast" value="true" />
                                         <div class="history-item-card">
                                             <div class="history-item-header">
                                                 <div>
-                                                    <div class="history-item-title">
-                                                        <c:choose>
-                                                            <c:when test="${item.fromAccount.user.id == loggedUser.id}">
-                                                                Transfer to Other Banks
-                                                            </c:when>
-                                                            <c:otherwise>
-                                                                Incoming Account Credit
-                                                            </c:otherwise>
-                                                        </c:choose>
+                                                    <div class="history-item-title">Incoming Account Credit</div>
+                                                    <div class="history-item-status">
+                                                        <c:out value="${item.status.status}" default="Completed"/>
                                                     </div>
-                                                    <div class="history-item-status">Completed</div>
                                                     <div class="history-item-date">on
                                                         <c:out value="${item.paymentDate}" />
                                                     </div>
                                                 </div>
                                                 <div class="text-end">
-                                                    <div class="history-item-amount 
-                                                <c:choose>
-                                                    <c:when test=" ${item.fromAccount.user.id==loggedUser.id}">
-                                                        text-danger</c:when>
-                                                        <c:otherwise>text-success</c:otherwise>
-                                                        </c:choose>">
-                                                        <c:choose>
-                                                            <c:when test="${item.fromAccount.user.id == loggedUser.id}">
-                                                                -</c:when>
-                                                            <c:otherwise>+</c:otherwise>
-                                                        </c:choose>
-                                                        $
-                                                        <c:out value="${item.amount}" />
+                                                    <div class="history-item-amount text-success">
+                                                        + $ <c:out value="${item.amount}" />
                                                     </div>
-                                                    <svg width="18" height="18" fill="var(--primary)" class="mt-2"
-                                                        viewBox="0 0 16 16">
-                                                        <path
-                                                            d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z" />
-                                                        <path
-                                                            d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z" />
-                                                    </svg>
                                                 </div>
                                             </div>
                                             <div class="history-item-details">
                                                 <div>
-                                                    <div class="detail-label">Action :</div>
-                                                    <div class="detail-value">Create</div>
-                                                </div>
-                                                <div>
-                                                    <div class="detail-label">Account :</div>
+                                                    <div class="detail-label">To Account :</div>
                                                     <div class="detail-value">
                                                         <c:out value="${item.toAccount.accountNo}" />
-                                                    </div>
-                                                </div>
-                                                <div>
-                                                    <div class="detail-label">Beneficiary Name :</div>
-                                                    <div class="detail-value">
-                                                        <c:out value="${item.toAccount.user.firstName}" />
-                                                        <c:out value="${item.toAccount.user.lastName}" />
                                                     </div>
                                                 </div>
                                                 <div>
@@ -173,25 +144,46 @@
                                         </div>
                                     </c:if>
                                 </c:forEach>
+                                
+                                <c:if test="${!hasPast}">
+                                    <div class="text-center py-5">
+                                        <img src="https://img.icons8.com/plasticine/100/000000/empty-box.png"
+                                            alt="Empty">
+                                        <p class="text-muted mt-3">No incoming credits found.</p>
+                                    </div>
+                                </c:if>
                             </div>
 
-                            <!-- Upcoming Tab -->
+                            <!-- Upcoming Tab (Scheduled Transfers) -->
                             <div class="tab-pane fade" id="upcoming">
                                 <c:set var="hasUpcoming" value="false" />
                                 <c:forEach var="item" items="${history}">
-                                    <c:if test="${item.status == 'PENDING' || item.status == 'SCHEDULED'}">
+                                    <c:if test="${item.fromAccount.user.id == loggedUser.id && item.status.status == 'Pending'}">
                                         <c:set var="hasUpcoming" value="true" />
                                         <div class="history-item-card" style="border-left-color: var(--accent);">
                                             <div class="history-item-header">
                                                 <div>
                                                     <div class="history-item-title">Scheduled Transfer</div>
-                                                    <div class="history-item-status text-warning">Pending</div>
+                                                    <div class="history-item-status text-warning">
+                                                        <c:out value="${item.status.status}" default="Pending"/>
+                                                    </div>
                                                     <div class="history-item-date">Execution on
                                                         <c:out value="${item.paymentDate}" />
                                                     </div>
                                                 </div>
                                                 <div class="text-end">
-                                                    <div class="history-item-amount">$
+                                                    <div class="history-item-amount 
+                                                    <c:choose>
+                                                        <c:when test=" ${item.fromAccount.user.id==loggedUser.id}">
+                                                            text-danger</c:when>
+                                                            <c:otherwise>text-success</c:otherwise>
+                                                            </c:choose>">
+                                                        <c:choose>
+                                                            <c:when test="${item.fromAccount.user.id == loggedUser.id}">
+                                                                -</c:when>
+                                                            <c:otherwise>+</c:otherwise>
+                                                        </c:choose>    
+                                                        $
                                                         <c:out value="${item.amount}" />
                                                     </div>
                                                 </div>
@@ -208,17 +200,19 @@
                                 </c:if>
                             </div>
 
-                            <!-- Outgoing Tab -->
+                            <!-- Outgoing Tab (Instant Transfers) -->
                             <div class="tab-pane fade" id="outgoing">
                                 <c:set var="hasOutgoing" value="false" />
                                 <c:forEach var="item" items="${history}">
-                                    <c:if test="${item.fromAccount.user.id == loggedUser.id}">
+                                    <c:if test="${item.fromAccount.user.id == loggedUser.id && (item.transferType.type == 'Instant' || item.status.status == 'Success')}">
                                         <c:set var="hasOutgoing" value="true" />
                                         <div class="history-item-card">
                                             <div class="history-item-header">
                                                 <div>
-                                                    <div class="history-item-title">Outgoing Transfer</div>
-                                                    <div class="history-item-status">${item.status}</div>
+                                                    <div class="history-item-title">Instant Outgoing Transfer</div>
+                                                    <div class="history-item-status">
+                                                        <c:out value="${item.status.status}" default="Success"/>
+                                                    </div>
                                                     <div class="history-item-date">Initiated on ${item.paymentDate}
                                                     </div>
                                                 </div>
@@ -232,7 +226,7 @@
                                 </c:forEach>
                                 <c:if test="${!hasOutgoing}">
                                     <div class="text-center py-5">
-                                        <p class="text-muted">No active outgoing fund transfers.</p>
+                                        <p class="text-muted">No active instant outgoing transfers.</p>
                                     </div>
                                 </c:if>
                             </div>

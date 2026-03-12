@@ -58,7 +58,7 @@ public class Login extends HttpServlet {
                 session.setAttribute("userAccount", account);
             }
 
-            response.sendRedirect(request.getContextPath() + "/dashboard.jsp");
+            response.sendRedirect(request.getContextPath() + "/dashboard");
 
         } else {
             System.out.println("Authentication failed");

@@ -14,6 +14,7 @@ import jakarta.persistence.NoResultException;
 import lk.jiat.app.core.model.Account;
 import lk.jiat.app.core.model.FundTransfer;
 import lk.jiat.app.core.model.Status;
+import lk.jiat.app.core.model.TransferType;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -36,9 +37,13 @@ public class FundTransferServiceBean {
     @Resource
     private TimerService timerService;
 
+    public java.util.List<TransferType> getAllTransferTypes() {
+        return em.createQuery("SELECT t FROM TransferType t", TransferType.class).getResultList();
+    }
+
     @TransactionAttribute(TransactionAttributeType.REQUIRED)
     public FundTransfer scheduleFundTransfer(String fromAccountNoStr, String toAccountNoStr,
-            BigDecimal amount, LocalDate paymentDate, String description) {
+            BigDecimal amount, LocalDate paymentDate, String description, Integer transferTypeId) {
 
         Long fromAccountNo;
         Long toAccountNo;
@@ -65,35 +70,72 @@ public class FundTransferServiceBean {
             throw new IllegalArgumentException("Account not found with provided account number", e);
         }
 
-        if (fromAccount.getBalance().compareTo(amount) < 0) {
-            throw new IllegalArgumentException("Insufficient funds in fromAccount");
+        if (fromAccount.getAccountNo().equals(toAccount.getAccountNo())) {
+            throw new IllegalArgumentException("BENEFICIARY ACCOUNT NO and FROM ACCOUNT can't be the same");
         }
 
-        fromAccount.setBalance(fromAccount.getBalance().subtract(amount));
-        toAccount.setBalance(toAccount.getBalance().add(amount));
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Amount must be greater than zero");
+        }
 
-        em.merge(fromAccount);
-        em.merge(toAccount);
+        if (fromAccount.getBalance().compareTo(amount) < 0) {
+            throw new IllegalArgumentException("Insufficient funds to complete the transfer");
+        }
+
+        boolean isToday = paymentDate.isEqual(LocalDate.now());
+
+        if (isToday) {
+            fromAccount.setBalance(fromAccount.getBalance().subtract(amount));
+            toAccount.setBalance(toAccount.getBalance().add(amount));
+
+            em.merge(fromAccount);
+            em.merge(toAccount);
+        }
+        TransferType transferType = em.find(TransferType.class, transferTypeId);
+        if (transferType == null) {
+            throw new IllegalArgumentException("Invalid transfer type selected");
+        }
 
         FundTransfer transfer = new FundTransfer();
+        if (isToday) {
+            if (fromAccount.getBalance().compareTo(amount) < 0) {
+                throw new IllegalArgumentException("Insufficient funds for instant transfer");
+            }
+            fromAccount.setBalance(fromAccount.getBalance().subtract(amount));
+            toAccount.setBalance(toAccount.getBalance().add(amount));
+            em.merge(fromAccount);
+            em.merge(toAccount);
+        }
+
         transfer.setFromAccount(fromAccount);
         transfer.setToAccount(toAccount);
         transfer.setAmount(amount);
         transfer.setPaymentDate(paymentDate);
         transfer.setDescription(description);
-        Status completedStatus;
+        transfer.setProcessed(isToday);
+        transfer.setTransferType(transferType);
+
+        Status status;
         try {
-            completedStatus = em.createQuery("SELECT s FROM Status s WHERE s.status = :name", Status.class)
-                    .setParameter("name", "Success")
+            String statusName = isToday ? "Success" : "Pending";
+            status = em.createQuery("SELECT s FROM Status s WHERE s.status = :name", Status.class)
+                    .setParameter("name", statusName)
                     .getSingleResult();
         } catch (NoResultException e) {
-            // Fallback or better error
             throw new IllegalStateException(
-                    "Status 'Success' not found in database. Please ensure data seeding is complete.", e);
+                    "Required status not found in database. Please ensure data seeding is complete.", e);
         }
-        transfer.setStatus(completedStatus);
+        transfer.setStatus(status);
 
         em.persist(transfer);
+
+        if (!isToday) {
+            // Schedule timer for future execution (1 MINUTE FROM NOW FOR DEMO/TESTING)
+            LocalDateTime triggerTime = LocalDateTime.now().plusMinutes(1);
+            Date triggerDate = Date.from(triggerTime.atZone(ZoneId.systemDefault()).toInstant());
+            TimerConfig config = new TimerConfig(transfer.getId(), true); // Made persistent just in case
+            timerService.createSingleActionTimer(triggerDate, config);
+        }
 
         return transfer;
     }
@@ -140,15 +182,45 @@ public class FundTransferServiceBean {
     @Timeout
     @TransactionAttribute(TransactionAttributeType.REQUIRED)
     public void executeScheduledTransfer(Timer timer) {
-        Long transferId = (Long) timer.getInfo();
+        Integer transferId = (Integer) timer.getInfo();
         System.out.println("Executing scheduled fund transfer ID: " + transferId);
 
         FundTransfer transfer = em.find(FundTransfer.class, transferId);
-        if (transfer != null && transfer.getStatus() != null && "Pending".equals(transfer.getStatus().getStatus())) {
-            // Logic for actual transfer if it wasn't processed immediately
-            // In this specific implementation, it seems transferFunds marks it as COMPLETED
-            // This timeout would be used for truly delayed execution.
-            System.out.println("Processing pending transfer ID: " + transferId);
+        if (transfer != null && !transfer.getProcessed()) {
+            Account fromAccount = transfer.getFromAccount();
+            Account toAccount = transfer.getToAccount();
+            BigDecimal amount = transfer.getAmount();
+
+            if (fromAccount.getBalance().compareTo(amount) >= 0) {
+                fromAccount.setBalance(fromAccount.getBalance().subtract(amount));
+                toAccount.setBalance(toAccount.getBalance().add(amount));
+
+                transfer.setProcessed(true);
+                try {
+                    Status successStatus = em.createQuery("SELECT s FROM Status s WHERE s.status = :name", Status.class)
+                            .setParameter("name", "Success")
+                            .getSingleResult();
+                    transfer.setStatus(successStatus);
+                } catch (NoResultException e) {
+                    System.err.println("Success status not found during scheduled transfer");
+                }
+
+                em.merge(fromAccount);
+                em.merge(toAccount);
+                em.merge(transfer);
+                System.out.println("Successfully processed scheduled transfer ID: " + transferId);
+            } else {
+                try {
+                    Status failedStatus = em.createQuery("SELECT s FROM Status s WHERE s.status = :name", Status.class)
+                            .setParameter("name", "Failed")
+                            .getSingleResult();
+                    transfer.setStatus(failedStatus);
+                    em.merge(transfer);
+                } catch (NoResultException e) {
+                    System.err.println("Failed status not found during scheduled transfer");
+                }
+                System.out.println("Scheduled transfer ID: " + transferId + " failed due to insufficient funds");
+            }
         }
     }
 

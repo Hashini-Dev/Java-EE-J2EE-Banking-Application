@@ -20,6 +20,8 @@ public interface UserService {
 
     boolean validate(String username, String password);
 
+    boolean existsByUsername(String username);
+
     boolean existsByEmail(String email);
 
     boolean existsByNic(String nic);
