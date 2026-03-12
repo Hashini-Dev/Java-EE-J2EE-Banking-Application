@@ -58,7 +58,12 @@ public class Login extends HttpServlet {
                 session.setAttribute("userAccount", account);
             }
 
-            response.sendRedirect(request.getContextPath() + "/dashboard");
+            if (user.getUserType() != null && user.getUserType().getType().equals("Admin")) {
+                response.sendRedirect(request.getContextPath() + "/admin-dashboard");
+            } else {
+                response.sendRedirect(request.getContextPath() + "/dashboard");
+            }
+
 
         } else {
             System.out.println("Authentication failed");

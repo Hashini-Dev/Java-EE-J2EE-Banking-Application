@@ -3,9 +3,12 @@ package lk.jiat.app.core.service;
 import jakarta.ejb.Remote;
 import lk.jiat.app.core.model.Account;
 import lk.jiat.app.core.model.User;
+import java.util.List;
 
 @Remote
 public interface UserService {
+    List<User> getAllUsers();
+
     User getUserById(Long id);
 
     User getUserByUsername(String username);
@@ -13,6 +16,8 @@ public interface UserService {
     void addUser(User user);
 
     void registerUser(User user);
+
+    void registerAdmin(User user);
 
     void updateUser(User user);
 

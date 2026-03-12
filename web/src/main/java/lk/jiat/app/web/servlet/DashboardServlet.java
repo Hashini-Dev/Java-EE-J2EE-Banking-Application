@@ -41,6 +41,11 @@ public class DashboardServlet extends HttpServlet {
             return;
         }
 
+        if (loggedUser.getUserType() != null && loggedUser.getUserType().getType().equals("Admin")) {
+            response.sendRedirect(request.getContextPath() + "/admin-dashboard");
+            return;
+        }
+
         // 1. Fetch the user's latest primary account info for balance display
         Account userAccount = accountServiceBean.getAccountByUser(loggedUser);
         if (userAccount != null) {

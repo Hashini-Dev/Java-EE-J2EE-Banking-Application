@@ -13,6 +13,7 @@ import lk.jiat.app.core.model.AccountType;
 import lk.jiat.app.core.model.User;
 import lk.jiat.app.core.model.UserType;
 import lk.jiat.app.core.service.UserService;
+import java.util.List;
 
 @Stateless
 public class UserSessionBean implements UserService {
@@ -36,6 +37,11 @@ public class UserSessionBean implements UserService {
     @Override
     public User getUserById(Long id) {
         return em.find(User.class, id);
+    }
+
+    @Override
+    public List<User> getAllUsers() {
+        return em.createQuery("SELECT u FROM User u", User.class).getResultList();
     }
 
     @Override
@@ -95,6 +101,33 @@ public class UserSessionBean implements UserService {
 
         // Persist Account
         em.persist(account);
+    }
+
+    @Override
+    @TransactionAttribute(TransactionAttributeType.REQUIRED)
+    public void registerAdmin(User user) {
+        // Check for existing users
+        if (existsByUsername(user.getUsername())) {
+            throw new DuplicateUserException("Already have account for this username");
+        }
+        if (existsByEmail(user.getEmail())) {
+            throw new DuplicateUserException("Already have account for this email");
+        }
+        if (existsByNic(user.getNic())) {
+            throw new DuplicateUserException("Already have account for this nic");
+        }
+        if (existsByContact(user.getContact())) {
+            throw new DuplicateUserException("Already have account for this mobile");
+        }
+
+        // Find Admin User Type
+        UserType adminType = em.createQuery("SELECT ut FROM UserType ut WHERE ut.type = :type", UserType.class)
+                .setParameter("type", "Admin")
+                .getSingleResult();
+        user.setUserType(adminType);
+
+        // Persist User ONLY (No Account)
+        em.persist(user);
     }
 
     @Override
